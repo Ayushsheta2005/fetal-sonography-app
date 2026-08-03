@@ -395,7 +395,7 @@ def get_recent_reports(limit: int = 50):
     """Retrieve recent clinical scan history from Postgres cloud archive."""
     if not supabase: return {"reports": []}
     try:
-        res = supabase.table("scan_reports").select("id, created_at, patient_id, patient_name, ga_days, efw_grams").order("created_at", desc=True).limit(limit).execute()
+        res = supabase.table("scan_reports").select("id, created_at, patient_id, patient_name, ga_days, efw_grams, report_data").order("created_at", desc=True).limit(limit).execute()
         return {"reports": res.data}
     except Exception as e:
         return {"reports": [], "error": str(e)}
