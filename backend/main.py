@@ -294,6 +294,19 @@ def make_pdf(data: ReportInput):
         filename=f"fetal_report_{data.patient_id}.pdf"
     )
 
+@app.post("/report/pdf/regenerate")
+def regenerate_pdf(payload: Dict[str, Any]):
+    """Re-generate a PDF from archived raw report JSON without re-archiving to DB."""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        output_path = tmp.name
+    generate_pdf(payload, output_path)
+    patient_id = payload.get("patient_id", "archived")
+    return FileResponse(
+        output_path,
+        media_type="application/pdf",
+        filename=f"fetal_report_{patient_id}.pdf"
+    )
+
 # ─── Universal Cloud Database Endpoints (No Logins Required!) ───────────────
 
 class CustomFindingInput(BaseModel):

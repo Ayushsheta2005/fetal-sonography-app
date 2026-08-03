@@ -1,11 +1,16 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import axios from 'axios'
 import {
-  Activity, FileText, Download, ChevronDown, ChevronUp,
+  Activity, FileText, ChevronDown, ChevronUp,
   Stethoscope, Heart, User, Calendar, Printer, ShieldAlert, Dna, Baby, RefreshCw, TrendingUp
 } from 'lucide-react'
+import NavBar from './components/NavBar'
+import HomePage from './pages/HomePage'
+import HistoryPage from './pages/HistoryPage'
 
 const API = (import.meta.env.VITE_BACKEND_URL as string) || 'http://localhost:8000'
+
+type Page = 'home' | 'scan' | 'history'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function centileClass(p?: number) {
@@ -174,8 +179,10 @@ function BiometryRow({ label, value, onChange, z, p, onBlur, meanVal }: any) {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
+  const [currentPage, setCurrentPage] = useState<Page>('home')
   const [tab, setTab] = useState<'scan' | 'doppler' | 'risk'>('scan')
   const [riskSubTab, setRiskSubTab] = useState<'pe' | 'trisomy' | 'sga' | 'gdm' | 'preterm' | 'soft_markers'>('pe')
+  void setTab // consumed by scan-tab nav below
 
   // Patient details
   const [patient, setPatient] = useState({
@@ -612,43 +619,27 @@ export default function App() {
     }
   }
 
+  if (currentPage === 'home') return (
+    <>
+      <NavBar currentPage={currentPage} onNavigate={setCurrentPage} />
+      <HomePage onNavigate={setCurrentPage} />
+    </>
+  )
+
+  if (currentPage === 'history') return (
+    <>
+      <NavBar currentPage={currentPage} onNavigate={setCurrentPage} />
+      <HistoryPage />
+    </>
+  )
+
+  // currentPage === 'scan'
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #0a0f1e 100%)' }}>
+    <>
+      <NavBar currentPage={currentPage} onNavigate={setCurrentPage} />
+      <div style={{ minHeight: 'calc(100vh - 56px)', background: 'linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #0a0f1e 100%)' }}>
 
-      {/* ── TOP HEADER ──────────────────────────────────────────────────────── */}
-      <div className="header-gradient" style={{ padding: '0 24px' }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 60 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#0ea5e9,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Activity size={18} color="white" />
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9' }}>FetalScan Pro</div>
-              <div style={{ fontSize: 11, color: '#64748b' }}>FMF-Based Clinical Reporting Platform</div>
-            </div>
-          </div>
 
-          {/* NAV TABS */}
-          <div style={{ display: 'flex', gap: 6 }}>
-            {(['scan', 'doppler', 'risk'] as const).map(t => (
-              <button key={t} className={`nav-tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
-                {t === 'scan' ? '🔬 Fetal Scan' : t === 'doppler' ? '💓 Dopplers' : '🛡️ Risk Engines'}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-primary" onClick={calculate}>
-              <Activity size={14} /> Calculate
-            </button>
-            <button className="btn-success" onClick={generatePdf}>
-              <Download size={14} /> PDF Report
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── BODY ─────────────────────────────────────────────────────────────── */}
       <div style={{ maxWidth: 1400, margin: '0 auto', padding: '20px 24px', display: 'grid', gridTemplateColumns: '340px 1fr 280px', gap: 16 }}>
 
         {/* LEFT COLUMN — Patient + Fetal Details */}
@@ -1744,6 +1735,7 @@ export default function App() {
           </Section>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   )
 }
