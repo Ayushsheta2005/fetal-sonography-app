@@ -1,0 +1,10 @@
+fastapi>=0.128.8
+uvicorn[standard]>=0.39.0
+reportlab>=5.0.0
+pydantic>=2.13.4
+python-multipart>=0.0.20
+numpy>=2.0.2
+scipy>=1.13.1
+pillow>=11.3.0
+supabase>=2.12.0
+python-dotenv>=1.0.1
