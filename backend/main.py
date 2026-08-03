@@ -134,6 +134,7 @@ class ReportInput(BaseModel):
     edd_lmp: str
     ga_scan: str
     edd_scan: str
+    ga_days: Optional[float] = None
     fetal_number: Optional[str] = "SINGLE"
     cardiac_activity: Optional[str] = "SEEN"
     presentation: Optional[str] = "CEPHALIC"
@@ -277,16 +278,35 @@ def make_pdf(data: ReportInput):
 
     if supabase:
         try:
-            efw = payload.get("patient_vals", {}).get("efw") if payload.get("patient_vals") else None
+            import re
+            efw_val = None
+            if data.biometry:
+                for row in data.biometry:
+                    if isinstance(row, dict) and row.get("param") == "EFW":
+                        meas = str(row.get("meas", ""))
+                        num_match = re.search(r"(\d+(?:\.\d+)?)", meas)
+                        if num_match:
+                            efw_val = float(num_match.group(1))
+
+            calc_ga_days = data.ga_days
+            if calc_ga_days is None and data.ga_scan:
+                w_match = re.search(r"(\d+)\s*w", data.ga_scan, re.I)
+                d_match = re.search(r"(\d+)\s*d", data.ga_scan, re.I)
+                w = int(w_match.group(1)) if w_match else 0
+                d = int(d_match.group(1)) if d_match else 0
+                if w or d:
+                    calc_ga_days = float(w * 7 + d)
+
             supabase.table("scan_reports").insert({
                 "patient_id": data.patient_id,
                 "patient_name": data.patient_name or "Anonymous",
-                "ga_days": data.ga_days,
-                "efw_grams": float(efw) if efw else None,
+                "ga_days": calc_ga_days,
+                "efw_grams": efw_val,
                 "report_data": payload
             }).execute()
+            print(f"✅ Archived scan report for patient {data.patient_id}")
         except Exception as err:
-            print(f"Supabase archival note: {err}")
+            print(f"Supabase archival error: {err}")
 
     return FileResponse(
         output_path,

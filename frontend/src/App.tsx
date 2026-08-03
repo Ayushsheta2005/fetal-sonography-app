@@ -582,6 +582,7 @@ export default function App() {
     try {
       const res = await axios.post(`${API}/report/pdf`, {
         patient_name: patient.name, patient_id: patient.id,
+        ga_days: patient.gaWeeksScan * 7 + patient.gaDaysScan,
         risk_assessment: activeRisks,
         selected_graphs: selectedGraphs,
         referring_doctor: patient.refDoc, exam_date: patient.examDate,
