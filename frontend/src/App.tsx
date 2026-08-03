@@ -208,9 +208,54 @@ export default function App() {
   // Anatomy state
   const [anatomy, setAnatomy] = useState<Record<string, string>>({})
   const [anatomyChecked, setAnatomyChecked] = useState<Record<string, boolean>>({})
-  const [anatomyItems, setAnatomyItems] = useState<Record<string, string[]>>(DEFAULT_ANATOMY_ITEMS)
+  const [anatomyItems, setAnatomyItems] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem('fmf_master_anatomy_structures_v1')
+      if (saved) return JSON.parse(saved)
+      return DEFAULT_ANATOMY_ITEMS
+    } catch {
+      return DEFAULT_ANATOMY_ITEMS
+    }
+  })
   const [newAnatomyInput, setNewAnatomyInput] = useState<Record<string, string>>({})
   const [customMeasures, setCustomMeasures] = useState({ lv: '5.6', nt: '4.5', cm: '5.2' })
+  const [newAnatomySection, setNewAnatomySection] = useState<string>('Thorax & Lungs')
+  const [newAnatomyStructureName, setNewAnatomyStructureName] = useState<string>('')
+
+  const addAnatomyStructure = () => {
+    const sec = newAnatomySection.trim() || 'General Anatomy'
+    const name = newAnatomyStructureName.trim()
+    if (!name) return
+    setAnatomyItems(prev => {
+      const currentList = prev[sec] || []
+      if (currentList.includes(name)) return prev
+      const updated = { ...prev, [sec]: [...currentList, name] }
+      try { localStorage.setItem('fmf_master_anatomy_structures_v1', JSON.stringify(updated)) } catch {}
+      return updated
+    })
+    setNewAnatomyStructureName('')
+  }
+
+  const removeAnatomyStructure = (section: string, item: string) => {
+    setAnatomyItems(prev => {
+      const list = (prev[section] || []).filter(i => i !== item)
+      const updated = { ...prev }
+      if (list.length === 0) {
+        delete updated[section]
+      } else {
+        updated[section] = list
+      }
+      try { localStorage.setItem('fmf_master_anatomy_structures_v1', JSON.stringify(updated)) } catch {}
+      return updated
+    })
+    const itemKey = `${section}:${item}`
+    setCustomAnatomyOptions(prev => {
+      const copy = { ...prev }
+      delete copy[itemKey]
+      try { localStorage.setItem('fmf_custom_anatomy_options_per_item', JSON.stringify(copy)) } catch {}
+      return copy
+    })
+  }
 
   // Persistent Custom Dropdown Values PER ANATOMICAL STRUCTURE (saved in localStorage so previous additions remain available forever)
   const [customAnatomyOptions, setCustomAnatomyOptions] = useState<Record<string, string[]>>(() => {
@@ -745,55 +790,88 @@ export default function App() {
 
             {showManageOptions && (
               <div style={{
-                margin: '6px 0 16px', padding: '12px 16px', background: 'rgba(15, 23, 42, 0.85)',
-                border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 10
+                margin: '6px 0 16px', padding: '14px 18px', background: 'rgba(15, 23, 42, 0.95)',
+                border: '1px solid #38bdf8', borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 8px 30px rgba(0,0,0,0.5)'
               }}>
-                <div style={{ fontSize: 12, color: '#38bdf8', fontWeight: 600, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                  <span>Saved Custom Options by Organ / Structure (0% Server Load • Persistent via LocalStorage):</span>
-                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>Click ✕ to remove an option from that organ's dropdown.</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ fontSize: 13, color: '#38bdf8', fontWeight: 700 }}>🏥 Manage Master Anatomical Structures & Saved Dropdowns</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Add new organ check items or click "🗑️ Remove Structure" to delete an anatomical item entirely from your hospital check list.</div>
                 </div>
-                {totalCustomOptionsCount === 0 ? (
-                  <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>No custom options saved yet. Use the "+ Value" button next to any anatomy dropdown to save custom phrases!</div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
-                    {Object.entries(customAnatomyOptions).map(([itemKey, opts]) => {
-                      if (!opts || opts.length === 0) return null
-                      const itemName = itemKey.includes(':') ? itemKey.split(':')[1] : itemKey
-                      const sectionName = itemKey.includes(':') ? itemKey.split(':')[0] : ''
-                      return (
-                        <div key={itemKey} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 12px', background: 'rgba(30, 41, 59, 0.7)', borderRadius: 8, border: '1px solid rgba(51, 65, 85, 0.6)' }}>
-                          <div style={{ fontSize: 11, color: '#38bdf8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span>📍 {itemName}</span>
-                            {sectionName && <span style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }}>— [{sectionName}]</span>}
+
+                {/* Add New Anatomical Structure Inline Bar */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', background: 'rgba(30, 41, 59, 0.9)', padding: '10px 14px', borderRadius: 8, border: '1px dashed rgba(56, 189, 248, 0.5)' }}>
+                  <span style={{ fontSize: 12, color: '#e2e8f0', fontWeight: 600 }}>+ New Anatomical Item:</span>
+                  <input
+                    type="text"
+                    value={newAnatomySection}
+                    onChange={e => setNewAnatomySection(e.target.value)}
+                    placeholder="Category (e.g. Face & Neck)"
+                    style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '5px 10px', fontSize: 12, color: 'white', minWidth: 140 }}
+                  />
+                  <input
+                    type="text"
+                    value={newAnatomyStructureName}
+                    onChange={e => setNewAnatomyStructureName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addAnatomyStructure()}
+                    placeholder="Structure Name (e.g. Palate normal)"
+                    style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, padding: '5px 10px', fontSize: 12, color: 'white', flex: 1, minWidth: 160 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={addAnatomyStructure}
+                    style={{ background: 'linear-gradient(to right, #0284c7, #0369a1)', color: 'white', border: 'none', padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    Add Structure
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 380, overflowY: 'auto' }}>
+                  {Object.entries(anatomyItems).map(([section, items]) => (
+                    <div key={section} style={{ display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(30, 41, 59, 0.5)', padding: 10, borderRadius: 8, border: '1px solid rgba(51, 65, 85, 0.8)' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0', borderBottom: '1px solid rgba(100, 116, 139, 0.3)', paddingBottom: 4 }}>
+                        📂 Category: {section} ({items.length} structures)
+                      </div>
+                      {items.map(item => {
+                        const itemKey = `${section}:${item}`
+                        const opts = customAnatomyOptions[itemKey] || []
+                        return (
+                          <div key={itemKey} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', background: 'rgba(15, 23, 42, 0.7)', borderRadius: 6, border: '1px solid rgba(51, 65, 85, 0.5)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                              <span style={{ fontSize: 12, color: '#38bdf8', fontWeight: 600 }}>🩺 {item}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeAnatomyStructure(section, item)}
+                                style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#f87171', padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                                title={`Delete ${item} structure completely`}
+                              >
+                                🗑️ Remove Structure
+                              </button>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                              <span style={{ fontSize: 10, color: '#64748b' }}>Saved Dropdown Choices:</span>
+                              {opts.length === 0 ? (
+                                <span style={{ fontSize: 11, color: '#475569', fontStyle: 'italic' }}>None (Standard Normal/Abnormal/Not Seen)</span>
+                              ) : (
+                                opts.map(opt => (
+                                  <div key={opt} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 8px', background: 'rgba(30, 41, 59, 0.9)', border: '1px solid #0284c7', borderRadius: 12, fontSize: 11, color: '#e2e8f0' }}>
+                                    <span>{opt}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => deleteCustomAnatomyOption(itemKey, opt)}
+                                      style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', fontWeight: 'bold', fontSize: 11 }}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ))
+                              )}
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                            {opts.map(opt => (
-                              <div key={opt} style={{
-                                display: 'flex', alignItems: 'center', gap: 6, padding: '3px 10px',
-                                background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(14, 165, 233, 0.4)',
-                                borderRadius: 16, fontSize: 11, color: '#e2e8f0', fontWeight: 500
-                              }}>
-                                <span>• {opt}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => deleteCustomAnatomyOption(itemKey, opt)}
-                                  title={`Remove "${opt}" from ${itemName} choices`}
-                                  style={{
-                                    background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)',
-                                    color: '#f87171', width: 16, height: 16, borderRadius: '50%', fontSize: 10,
-                                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'
-                                  }}
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {Object.entries(anatomyItems).map(([section, items]) => {
