@@ -278,7 +278,7 @@ def make_pdf(data: ReportInput):
 
     if supabase:
         try:
-            import re
+            import re, json
             efw_val = None
             if data.biometry:
                 for row in data.biometry:
@@ -297,12 +297,15 @@ def make_pdf(data: ReportInput):
                 if w or d:
                     calc_ga_days = float(w * 7 + d)
 
+            # Sanitize payload for Postgres JSONB column
+            clean_payload = json.loads(json.dumps(payload, default=str))
+
             supabase.table("scan_reports").insert({
-                "patient_id": data.patient_id,
-                "patient_name": data.patient_name or "Anonymous",
-                "ga_days": calc_ga_days,
+                "patient_id": data.patient_id or "ANONYMOUS",
+                "patient_name": data.patient_name or "Anonymous Patient",
+                "ga_days": calc_ga_days or 0.0,
                 "efw_grams": efw_val,
-                "report_data": payload
+                "report_data": clean_payload
             }).execute()
             print(f"✅ Archived scan report for patient {data.patient_id}")
         except Exception as err:
