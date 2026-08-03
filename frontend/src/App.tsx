@@ -247,6 +247,7 @@ export default function App() {
     setAnatomy(a => ({ ...a, [key]: val }))
     setAddingOptionKey(null)
     setNewOptionValue('')
+    axios.post(`${API}/db/custom_findings`, { category: 'anatomy', marker_key: key, option_text: val }).catch(() => {})
   }
 
   const deleteCustomAnatomyOption = (key: string, optToDelete: string) => {
@@ -262,13 +263,13 @@ export default function App() {
       try { localStorage.setItem('fmf_custom_anatomy_options_per_item', JSON.stringify(nextObj)) } catch {}
       return nextObj
     })
-    // Reset this specific anatomy item if it was currently utilizing this deleted option
     setAnatomy(prev => {
       if (prev[key] === optToDelete) {
         return { ...prev, [key]: 'normal' }
       }
       return prev
     })
+    axios.delete(`${API}/db/custom_findings`, { data: { category: 'anatomy', marker_key: key, option_text: optToDelete } }).catch(() => {})
   }
 
   const totalCustomOptionsCount = Object.values(customAnatomyOptions).reduce((sum, arr) => sum + (arr ? arr.length : 0), 0)
@@ -343,6 +344,7 @@ export default function App() {
     try { localStorage.setItem('fmf_soft_marker_custom_options', JSON.stringify(updated)) } catch {}
     setAddingSoftMarkerKey(null)
     setNewSoftMarkerValue('')
+    axios.post(`${API}/db/custom_findings`, { category: 'soft_marker', marker_key: key, option_text: val }).catch(() => {})
   }
 
   const deleteSoftMarkerOption = (key: string, optionToDelete: string) => {
@@ -350,7 +352,39 @@ export default function App() {
     const updated = { ...softMarkerCustom, [key]: updatedOptions }
     setSoftMarkerCustom(updated)
     try { localStorage.setItem('fmf_soft_marker_custom_options', JSON.stringify(updated)) } catch {}
+    axios.delete(`${API}/db/custom_findings`, { data: { category: 'soft_marker', marker_key: key, option_text: optionToDelete } }).catch(() => {})
   }
+
+  // Universal Cloud Sync: Fetch shared custom findings from Supabase Postgres on startup!
+  useEffect(() => {
+    axios.get(`${API}/db/custom_findings/anatomy`).then(res => {
+      const dbAnatomy = res.data?.options || {}
+      if (Object.keys(dbAnatomy).length > 0) {
+        setCustomAnatomyOptions(prev => {
+          const merged = { ...prev }
+          Object.keys(dbAnatomy).forEach(k => {
+            merged[k] = Array.from(new Set([...(merged[k] || []), ...dbAnatomy[k]]))
+          })
+          try { localStorage.setItem('fmf_custom_anatomy_options_per_item', JSON.stringify(merged)) } catch {}
+          return merged
+        })
+      }
+    }).catch(() => {})
+
+    axios.get(`${API}/db/custom_findings/soft_marker`).then(res => {
+      const dbMarkers = res.data?.options || {}
+      if (Object.keys(dbMarkers).length > 0) {
+        setSoftMarkerCustom(prev => {
+          const merged = { ...prev }
+          Object.keys(dbMarkers).forEach(k => {
+            merged[k] = Array.from(new Set([...(merged[k] || []), ...dbMarkers[k]]))
+          })
+          try { localStorage.setItem('fmf_soft_marker_custom_options', JSON.stringify(merged)) } catch {}
+          return merged
+        })
+      }
+    }).catch(() => {})
+  }, [])
 
   const gaDays = patient.gaWeeksScan * 7 + patient.gaDaysScan
   const gaWeeks = patient.gaWeeksScan + patient.gaDaysScan / 7

@@ -2,10 +2,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import uvicorn
 import tempfile
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://rchgoxrxdlcwltpszqnk.supabase.co")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjaGdveHJ4ZGxjd2x0cHN6cW5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NzgxMzMsImV4cCI6MjEwMTM1NDEzM30.jxGcKafDPp4glkLQn0_7QLnlJh9fgVwzN7DRkCBVkWs")
+
+try:
+    from supabase import create_client, Client
+    supabase: Optional[Client] = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    print(f"Supabase init note: {e}")
+    supabase = None
 
 from app.engine.fmf import FMFEngine, FMFRiskEngine
 from app.engine.pdf_generator import generate_pdf
@@ -260,13 +272,88 @@ def make_pdf(data: ReportInput):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         output_path = tmp.name
 
-    generate_pdf(data.model_dump(), output_path)
+    payload = data.model_dump()
+    generate_pdf(payload, output_path)
+
+    if supabase:
+        try:
+            efw = payload.get("patient_vals", {}).get("efw") if payload.get("patient_vals") else None
+            supabase.table("scan_reports").insert({
+                "patient_id": data.patient_id,
+                "patient_name": data.patient_name or "Anonymous",
+                "ga_days": data.ga_days,
+                "efw_grams": float(efw) if efw else None,
+                "report_data": payload
+            }).execute()
+        except Exception as err:
+            print(f"Supabase archival note: {err}")
 
     return FileResponse(
         output_path,
         media_type="application/pdf",
         filename=f"fetal_report_{data.patient_id}.pdf"
     )
+
+# ─── Universal Cloud Database Endpoints (No Logins Required!) ───────────────
+
+class CustomFindingInput(BaseModel):
+    category: str  # 'anatomy' or 'soft_marker'
+    marker_key: str
+    option_text: str
+
+@app.get("/db/custom_findings/{category}")
+def get_custom_findings(category: str):
+    """Universal fetch of shared clinic custom dropdown options."""
+    if not supabase: return {"options": {}}
+    try:
+        res = supabase.table("custom_findings").select("marker_key, option_text").eq("category", category).execute()
+        grouped = {}
+        for row in res.data:
+            mk = row["marker_key"]
+            val = row["option_text"]
+            if mk not in grouped: grouped[mk] = []
+            grouped[mk].append(val)
+        return {"options": grouped}
+    except Exception as e:
+        return {"options": {}, "error": str(e)}
+
+@app.post("/db/custom_findings")
+def add_custom_finding(data: CustomFindingInput):
+    """Write a new custom option globally to cloud storage so all doctors see it."""
+    if not supabase: return {"status": "offline_mode"}
+    try:
+        supabase.table("custom_findings").upsert({
+            "category": data.category,
+            "marker_key": data.marker_key,
+            "option_text": data.option_text
+        }, on_conflict="category,marker_key,option_text").execute()
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.delete("/db/custom_findings")
+def remove_custom_finding(data: CustomFindingInput):
+    """Remove a custom option globally."""
+    if not supabase: return {"status": "offline_mode"}
+    try:
+        supabase.table("custom_findings").delete().match({
+            "category": data.category,
+            "marker_key": data.marker_key,
+            "option_text": data.option_text
+        }).execute()
+        return {"status": "deleted"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/db/reports")
+def get_recent_reports(limit: int = 50):
+    """Retrieve recent clinical scan history from Postgres cloud archive."""
+    if not supabase: return {"reports": []}
+    try:
+        res = supabase.table("scan_reports").select("id, created_at, patient_id, patient_name, ga_days, efw_grams").order("created_at", desc=True).limit(limit).execute()
+        return {"reports": res.data}
+    except Exception as e:
+        return {"reports": [], "error": str(e)}
 
 @app.get("/")
 @app.get("/health")
