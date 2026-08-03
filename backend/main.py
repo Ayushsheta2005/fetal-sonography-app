@@ -276,40 +276,49 @@ def make_pdf(data: ReportInput):
     payload = data.model_dump()
     generate_pdf(payload, output_path)
 
-    if supabase:
-        try:
-            import re, json
-            efw_val = None
-            if data.biometry:
-                for row in data.biometry:
-                    if isinstance(row, dict) and row.get("param") == "EFW":
-                        meas = str(row.get("meas", ""))
-                        num_match = re.search(r"(\d+(?:\.\d+)?)", meas)
-                        if num_match:
-                            efw_val = float(num_match.group(1))
+    # ── Archival into Supabase Postgres Database via PostgREST ──
+    try:
+        import re, json, urllib.request
+        efw_val = None
+        if data.biometry:
+            for row in data.biometry:
+                if isinstance(row, dict) and row.get("param") == "EFW":
+                    meas = str(row.get("meas", ""))
+                    num_match = re.search(r"(\d+(?:\.\d+)?)", meas)
+                    if num_match:
+                        efw_val = float(num_match.group(1))
 
-            calc_ga_days = data.ga_days
-            if calc_ga_days is None and data.ga_scan:
-                w_match = re.search(r"(\d+)\s*w", data.ga_scan, re.I)
-                d_match = re.search(r"(\d+)\s*d", data.ga_scan, re.I)
-                w = int(w_match.group(1)) if w_match else 0
-                d = int(d_match.group(1)) if d_match else 0
-                if w or d:
-                    calc_ga_days = float(w * 7 + d)
+        calc_ga_days = data.ga_days
+        if calc_ga_days is None and data.ga_scan:
+            w_match = re.search(r"(\d+)\s*w", data.ga_scan, re.I)
+            d_match = re.search(r"(\d+)\s*d", data.ga_scan, re.I)
+            w = int(w_match.group(1)) if w_match else 0
+            d = int(d_match.group(1)) if d_match else 0
+            if w or d:
+                calc_ga_days = float(w * 7 + d)
 
-            # Sanitize payload for Postgres JSONB column
-            clean_payload = json.loads(json.dumps(payload, default=str))
+        clean_payload = json.loads(json.dumps(payload, default=str))
 
-            supabase.table("scan_reports").insert({
-                "patient_id": data.patient_id or "ANONYMOUS",
-                "patient_name": data.patient_name or "Anonymous Patient",
-                "ga_days": calc_ga_days or 0.0,
-                "efw_grams": efw_val,
-                "report_data": clean_payload
-            }).execute()
-            print(f"✅ Archived scan report for patient {data.patient_id}")
-        except Exception as err:
-            print(f"Supabase archival error: {err}")
+        db_url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/scan_reports"
+        db_headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        db_data = {
+            "patient_id": data.patient_id or "ANONYMOUS",
+            "patient_name": data.patient_name or "Anonymous Patient",
+            "ga_days": calc_ga_days or 0.0,
+            "efw_grams": efw_val,
+            "report_data": clean_payload
+        }
+
+        req = urllib.request.Request(db_url, data=json.dumps(db_data).encode("utf-8"), headers=db_headers)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            print(f"✅ Archived scan report for patient {data.patient_id} (HTTP {resp.status})")
+    except Exception as err:
+        print(f"⚠️ Supabase Archival Exception: {err}")
 
     return FileResponse(
         output_path,
